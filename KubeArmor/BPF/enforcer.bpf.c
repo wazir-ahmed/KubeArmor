@@ -13,6 +13,10 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define MAX_BUFFERS 1
 #define PATH_BUFFER 0
 
+/* In some of the distro, the generated
+ * vmlinux.h does not contain this value */
+#define PROC_PID_INIT_INO   0xEFFFFFFCU
+
 enum deny_by_default {
   dproc = 101,
   dfile,

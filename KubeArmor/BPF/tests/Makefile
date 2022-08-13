@@ -5,6 +5,7 @@
 include ../Makefile.vars
 
 LIBBPF = $(CURDIR)/../libbpf
+VMLINUX = $(CURDIR)/../
 
 Cfiles =  $(wildcard checks/*.c)
 files = $(Cfiles:.c=)
@@ -20,7 +21,7 @@ syscheck: main.go
 compile-all: checks/*.c
 	@for i in $(files) ; do \
 	echo "Compiling eBPF bytecode: $(GREEN)$$i.c$(NC) ..." && \
-	$(CL) $(KF) -DMONITOR_HOST_AND_CONTAINER -c $$i.c -o -| llc -march=bpf -mcpu=probe -filetype=obj -o $$i.bpf.o;\
+	$(CL) $(KF) -DMONITOR_HOST_AND_CONTAINER -c $$i.c -o $$i.bpf.o;\
 	done
 
 .PHONY: check

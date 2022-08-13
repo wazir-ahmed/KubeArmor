@@ -380,6 +380,11 @@ func GenerateDaemonSet(env, namespace string) *appsv1.DaemonSet {
 			ReadOnly:  true,
 		},
 		{
+			Name:      "sys-kernel-btf", // BTF (read-only)
+			MountPath: "/sys/kernel/btf",
+			ReadOnly:  true,
+		},
+		{
 			Name:      "sys-fs-bpf-path", //BPF (read-write)
 			MountPath: "/sys/fs/bpf",
 		},
@@ -411,6 +416,15 @@ func GenerateDaemonSet(env, namespace string) *appsv1.DaemonSet {
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: "/lib/modules",
 					Type: &hostPathDirectory,
+				},
+			},
+		},
+		{
+			Name: "sys-kernel-btf",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/sys/kernel/btf",
+					Type: &hostPathDirectoryOrCreate,
 				},
 			},
 		},
