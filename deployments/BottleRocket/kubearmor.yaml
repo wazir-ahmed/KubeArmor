@@ -112,12 +112,11 @@ spec:
         - mountPath: /lib/modules
           name: lib-modules-path
           readOnly: true
+        - mountPath: /sys/kernel
+          name: sys-kernel
+          readOnly: true
         - mountPath: /sys/fs/bpf
           name: sys-fs-bpf-path
-        - mountPath: /sys/kernel/security
-          name: sys-kernel-security-path
-        - mountPath: /sys/kernel/debug
-          name: sys-kernel-debug-path
         - mountPath: /media/root/etc/os-release
           name: os-release-path
           readOnly: true
@@ -149,12 +148,11 @@ spec:
         - mountPath: /lib/modules
           name: lib-modules-path
           readOnly: true
+        - mountPath: /sys/kernel
+          name: sys-kernel
+          readOnly: true
         - mountPath: /sys/fs/bpf
           name: sys-fs-bpf-path
-        - mountPath: /sys/kernel/security
-          name: sys-kernel-security-path
-        - mountPath: /sys/kernel/debug
-          name: sys-kernel-debug-path
         - mountPath: /media/root/etc/os-release
           name: os-release-path
           readOnly: true
@@ -176,17 +174,13 @@ spec:
           type: Directory
         name: lib-modules-path
       - hostPath:
+          path: /sys/kernel
+          type: Directory
+        name: sys-kernel
+      - hostPath:
           path: /sys/fs/bpf
           type: Directory
         name: sys-fs-bpf-path
-      - hostPath:
-          path: /sys/kernel/security
-          type: Directory
-        name: sys-kernel-security-path
-      - hostPath:
-          path: /sys/kernel/debug
-          type: Directory
-        name: sys-kernel-debug-path
       - hostPath:
           path: /etc/os-release
           type: File
