@@ -1,5 +1,18 @@
+RED=\033[0;31m
+GREEN=\033[0;32m
+CYAN=\033[0;36m
+NC=\033[0m
+
+KRBTF = /sys/kernel/btf/vmlinux
+
+KRNVER = $(shell uname -r)
+# split kernel version string
+KRNV_S = $(subst ., ,$(KRNVER)) # x.y.z-rc-arch --> x y z-rc-arch
+KRNV_X = $(word 1,$(KRNV_S)) # major version
+KRNV_Y = $(word 2,$(KRNV_S)) # patch level version 
+KRNV_Z = $(firstword $(subst -, ,$(word 3,$(KRNV_S)))) # sublevel version
+
 ifeq (,$(KRNDIR))
-	KRNVER = $(shell uname -r)
 ifneq (,$(wildcard /lib/modules/$(KRNVER)/build/Kconfig))
 	KRNDIR = /lib/modules/$(KRNVER)/build
 else ifneq (,$(wildcard /lib/modules/$(KRNVER)/source/Kconfig))
@@ -21,19 +34,33 @@ ifeq ($(V),1)
   Q =
 endif
 
-# shamelessly copied from kernel's samples/bpf/Makefile
-KF = -I$(KRNDIR)/arch/x86/include -I$(KRNDIR)/arch/x86/include/generated  \
-	 -I$(KRNDIR)/include -I$(KRNDIR)/arch/x86/include/uapi \
-	 -I$(KRNDIR)/arch/x86/include/generated/uapi -I$(KRNDIR)/include/uapi \
-	 -I$(KRNDIR)/include/generated/uapi \
-	 -I$(LIBBPF)/src \
-	 -include $(KRNDIR)/include/linux/kconfig.h \
+BTF_SUPPORTED = 0
+ifneq (,$(wildcard $(KRBTF)))
+	BTF_SUPPORTED = 1
+endif
+
+ifeq ($(BTF_SUPPORTED),1)
+	KF = -DBTF_SUPPORTED
+else
+	# copied from kernel's samples/bpf/Makefile
+	KF = -I$(KRNDIR)/arch/x86/include -I$(KRNDIR)/arch/x86/include/generated  \
+	 	 -I$(KRNDIR)/include -I$(KRNDIR)/arch/x86/include/uapi \
+	 	 -I$(KRNDIR)/arch/x86/include/generated/uapi -I$(KRNDIR)/include/uapi \
+	 	 -I$(KRNDIR)/include/generated/uapi \
+	 	 -include $(KRNDIR)/include/linux/kconfig.h
+endif
+
+KF := $(KF) -I$(LIBBPF)/src \
+	 -DLINUX_VERSION_MAJOR=$(KRNV_X) \
+	 -DLINUX_VERSION_PATCHLEVEL=$(KRNV_Y) \
+	 -DLINUX_VERSION_SUBLEVEL=$(KRNV_Z) \
 	 -D__KERNEL__ \
 	 -D__BPF_TRACING__ \
 	 -D__TARGET_ARCH_x86 \
 	 -Wunused \
 	 -Wno-frame-address \
 	 -Wno-unused-value \
+	 -Wno-unused-function \
 	 -Wno-unknown-warning-option \
 	 -Wno-pragma-once-outside-header \
 	 -Wno-pointer-sign \
@@ -45,49 +72,52 @@ KF = -I$(KRNDIR)/arch/x86/include -I$(KRNDIR)/arch/x86/include/generated  \
 	 -fno-jump-tables \
 	 -fno-unwind-tables \
 	 -fno-asynchronous-unwind-tables \
-	 -xc -O2 -g -emit-llvm
+	 -xc -O2 -g -target bpf
 
-SRCDIR=$(CURDIR)
-
-SRCS_KERN:=$(wildcard $(SRCDIR)/*.c)
-SRCN:=$(notdir $(SRCS_KERN))
 SYSMONITOR = $(CURDIR)/system_monitor.c
-
-RED=\033[0;31m
-GREEN=\033[0;32m
-CYAN=\033[0;36m
-NC=\033[0m
-
+ 
 .PHONY: all
-all: chkdir system_monitor.bpf.o system_monitor.container.bpf.o system_monitor.host.bpf.o
+all: kernel_headers libbpf system_monitor.bpf.o system_monitor.container.bpf.o system_monitor.host.bpf.o
 
-.PHONY: chkdir
-chkdir:
-ifeq (,$(wildcard $(KRNDIR)/Kconfig))
-	@echo "Your kernel path[$(RED)$(KRNDIR)$(NC)] is incorrect. Use 'make KRNDIR=[KERNEL-SRC-PATH]'."
-	Quitting 
+.PHONY: kernel_headers
+kernel_headers:
+ifeq ($(BTF_SUPPORTED),1)
+	@echo "$(GREEN)Kernel BTF information found$(NC)"
+	@echo "Generating vmlinux.h.."
+	$(Q)bpftool btf dump file /sys/kernel/btf/vmlinux format c > $(CURDIR)/vmlinux.h
 else
-	@echo "Using kernel path[$(GREEN)$(KRNDIR)$(NC)]"
+	@echo "$(RED)Kernel BTF information not found$(NC)"
+	@echo "Trying to use kernel headers present in the host"
+	ifeq (,$(wildcard $(KRNDIR)/Kconfig))
+		@echo "$(RED)Auto-detected kernel headers path [$(KRNDIR)] is incorrect.$(NC) Use 'make KRNDIR=[KERNEL-SRC-PATH]'."
+		Quitting 
+	else
+		@echo "$(GREEN)Using kernel headers at $(KRNDIR)$(NC)"
+	endif
 endif
+
+.PHONY: libbpf
+libbpf:
 ifeq (,$(wildcard $(LIBBPF)/src/libbpf.c))
-	git submodule update --init --recursive
+	$(Q)git submodule update --init --recursive
 endif
 ifeq (,$(wildcard $(LIBBPF)/src/libbpf.a))
-	make -C $(LIBBPF)/src
+	$(Q)make -C $(LIBBPF)/src
 endif
 
 system_monitor.bpf.o: $(SYSMONITOR)
 	@echo "Compiling eBPF bytecode: $(GREEN)$@$(NC) ..."
-	$(Q)$(CL) $(KF) -DMONITOR_HOST_AND_CONTAINER -c $< -o -| llc -march=bpf -mcpu=probe -filetype=obj -o $@
+	$(Q)$(CL) $(KF) -DMONITOR_HOST_AND_CONTAINER -c $< -o $@
 
 system_monitor.container.bpf.o: $(SYSMONITOR)
 	@echo "Compiling eBPF bytecode: $(GREEN)$@$(NC) ..."
-	$(Q)$(CL) $(KF) -DMONITOR_CONTAINER -c $< -o -| llc -march=bpf -mcpu=probe -filetype=obj -o $@
+	$(Q)$(CL) $(KF) -DMONITOR_CONTAINER -c $< -o $@
 
 system_monitor.host.bpf.o: $(SYSMONITOR)
 	@echo "Compiling eBPF bytecode: $(GREEN)$@$(NC) ..."
-	$(Q)$(CL) $(KF) -DMONITOR_HOST -c $< -o -| llc -march=bpf -mcpu=probe -filetype=obj -o $@
+	$(Q)$(CL) $(KF) -DMONITOR_HOST -c $< -o $@
 
 # clean up
 clean:
-	$(Q)rm -rf *.o
+	$(Q)rm -rf *.o vmlinux.h
+	$(Q)make clean -C $(LIBBPF)/src
